@@ -13,26 +13,22 @@ type OrderHandler struct {
 	cancelOrderUseCase *usecase.CancelOrderUseCase
 }
 
-// CreateOrderRequest represents the request body for creating an order
 type CreateOrderRequest struct {
 	CustomerID string `json:"customer_id" binding:"required"`
 	ItemName   string `json:"item_name" binding:"required"`
 	Amount     int64  `json:"amount" binding:"required,gt=0"`
 }
 
-// CreateOrderResponse represents the response for order creation
 type CreateOrderResponse struct {
 	Order   interface{} `json:"order"`
 	Status  string      `json:"status"`
 	Message string      `json:"message,omitempty"`
 }
 
-// ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// NewOrderHandler creates a new OrderHandler instance
 func NewOrderHandler(
 	createUC *usecase.CreateOrderUseCase,
 	getUC *usecase.GetOrderUseCase,
@@ -45,17 +41,14 @@ func NewOrderHandler(
 	}
 }
 
-// CreateOrder handles POST /orders
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var req CreateOrderRequest
 
-	// Parse and validate request
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	// Execute use case
 	input := usecase.CreateOrderInput{
 		CustomerID: req.CustomerID,
 		ItemName:   req.ItemName,
@@ -65,10 +58,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	output, err := h.createOrderUseCase.Execute(input)
 
 	if err != nil {
-		// Check if it's a payment service error (503 case)
 		if err.Error() == "payment service unavailable: context deadline exceeded" ||
 			err.Error() == "payment service unavailable: dial tcp" {
-			// Payment service is unavailable, but order is created with Pending status
 			c.JSON(http.StatusServiceUnavailable, CreateOrderResponse{
 				Order:   output.Order,
 				Status:  "pending",
@@ -77,12 +68,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 			return
 		}
 
-		// Other errors
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	// Success response
 	c.JSON(http.StatusOK, CreateOrderResponse{
 		Order:   output.Order,
 		Status:  output.Status,
@@ -90,7 +79,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	})
 }
 
-// GetOrder handles GET /orders/:id
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -113,7 +101,6 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
-// CancelOrder handles PATCH /orders/:id/cancel
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	orderID := c.Param("id")
 

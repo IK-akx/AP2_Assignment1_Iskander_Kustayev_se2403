@@ -6,34 +6,28 @@ import (
 	"time"
 )
 
-// AuthorizePaymentInput represents the input for payment authorization
 type AuthorizePaymentInput struct {
 	OrderID string
 	Amount  int64
 }
 
-// AuthorizePaymentOutput represents the output after authorization
 type AuthorizePaymentOutput struct {
 	TransactionID string
 	Status        string
 	Message       string
 }
 
-// AuthorizePaymentUseCase handles payment authorization logic
 type AuthorizePaymentUseCase struct {
 	paymentRepo domain.PaymentRepository
 }
 
-// NewAuthorizePaymentUseCase creates a new instance
 func NewAuthorizePaymentUseCase(paymentRepo domain.PaymentRepository) *AuthorizePaymentUseCase {
 	return &AuthorizePaymentUseCase{
 		paymentRepo: paymentRepo,
 	}
 }
 
-// Execute processes a payment authorization
 func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*AuthorizePaymentOutput, error) {
-	// Validate input
 	if input.OrderID == "" {
 		return nil, fmt.Errorf("order_id is required")
 	}
@@ -42,7 +36,6 @@ func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*Author
 		return nil, fmt.Errorf("amount must be greater than 0")
 	}
 
-	// Check if payment already exists for this order
 	existingPayment, err := uc.paymentRepo.GetByOrderID(input.OrderID)
 	if err == nil && existingPayment != nil {
 		// Return existing payment if found (idempotency)
@@ -53,7 +46,6 @@ func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*Author
 		}, nil
 	}
 
-	// Business rule: Check payment limit
 	var status string
 	var message string
 
@@ -65,10 +57,8 @@ func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*Author
 		message = "Payment authorized successfully"
 	}
 
-	// Generate unique transaction ID
 	transactionID := generateTransactionID()
 
-	// Create payment record
 	payment := &domain.Payment{
 		ID:            generatePaymentID(),
 		OrderID:       input.OrderID,
@@ -78,7 +68,6 @@ func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*Author
 		CreatedAt:     time.Now(),
 	}
 
-	// Save to database
 	if err := uc.paymentRepo.Create(payment); err != nil {
 		return nil, fmt.Errorf("failed to save payment: %w", err)
 	}
@@ -90,12 +79,10 @@ func (uc *AuthorizePaymentUseCase) Execute(input AuthorizePaymentInput) (*Author
 	}, nil
 }
 
-// generatePaymentID generates a unique payment ID
 func generatePaymentID() string {
 	return fmt.Sprintf("PAY-%d", time.Now().UnixNano())
 }
 
-// generateTransactionID generates a unique transaction ID
 func generateTransactionID() string {
 	return fmt.Sprintf("TXN-%d", time.Now().UnixNano())
 }

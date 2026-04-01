@@ -5,19 +5,16 @@ import (
 	"order/internal/domain"
 )
 
-// GetOrderUseCase handles retrieving order details
 type GetOrderUseCase struct {
 	orderRepo domain.OrderRepository
 }
 
-// NewGetOrderUseCase creates a new instance of GetOrderUseCase
 func NewGetOrderUseCase(orderRepo domain.OrderRepository) *GetOrderUseCase {
 	return &GetOrderUseCase{
 		orderRepo: orderRepo,
 	}
 }
 
-// Execute retrieves an order by its ID
 func (uc *GetOrderUseCase) Execute(orderID string) (*domain.Order, error) {
 	if orderID == "" {
 		return nil, fmt.Errorf("order ID is required")

@@ -21,50 +21,39 @@ import (
 )
 
 func main() {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
 	}
 
-	// Database connection
 	db := initDatabase()
 
-	// Auto migrate the schema
 	if err := db.AutoMigrate(&domain.Order{}); err != nil {
 		log.Fatal("Failed to migrate database: ", err)
 	}
 	log.Println("Database migrated successfully")
 
-	// Initialize repositories
 	orderRepo := repository.NewOrderRepository(db)
 
-	// Initialize payment client
 	paymentServiceURL := getEnv("PAYMENT_SERVICE_URL", "http://localhost:8081")
 	httpTimeout := getEnvAsInt("HTTP_TIMEOUT", 2)
 	paymentClient := client.NewPaymentClient(paymentServiceURL, time.Duration(httpTimeout)*time.Second)
 
-	// Initialize use cases
 	createOrderUC := usecase.NewCreateOrderUseCase(orderRepo, paymentClient)
 	getOrderUC := usecase.NewGetOrderUseCase(orderRepo)
 	cancelOrderUC := usecase.NewCancelOrderUseCase(orderRepo)
 
-	// Initialize handlers
 	orderHandler := rest.NewOrderHandler(createOrderUC, getOrderUC, cancelOrderUC)
 
-	// Setup Gin router
 	router := gin.Default()
 
-	// Routes
 	router.POST("/orders", orderHandler.CreateOrder)
 	router.GET("/orders/:id", orderHandler.GetOrder)
 	router.PATCH("/orders/:id/cancel", orderHandler.CancelOrder)
 
-	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	// Start server
 	port := getEnv("ORDER_SERVICE_PORT", "8080")
 	log.Printf("Order Service starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
@@ -73,7 +62,6 @@ func main() {
 }
 
 func initDatabase() *gorm.DB {
-	// Database configuration
 	host := getEnv("DB_HOST", "localhost")
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
@@ -84,7 +72,6 @@ func initDatabase() *gorm.DB {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbname, sslMode)
 
-	// Configure GORM
 	config := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	}
@@ -94,13 +81,11 @@ func initDatabase() *gorm.DB {
 		log.Fatal("Failed to connect to database: ", err)
 	}
 
-	// Get underlying sql.DB to set connection pool
 	sqlDB, err := db.DB()
 	if err != nil {
 		log.Fatal("Failed to get database instance: ", err)
 	}
 
-	// Set connection pool settings
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
@@ -109,7 +94,6 @@ func initDatabase() *gorm.DB {
 	return db
 }
 
-// Helper functions to get environment variables
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

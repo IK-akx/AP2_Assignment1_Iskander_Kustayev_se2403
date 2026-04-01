@@ -12,20 +12,17 @@ type PaymentHandler struct {
 	getPaymentUC *usecase.GetPaymentUseCase
 }
 
-// AuthorizePaymentRequest represents the request body for payment authorization
 type AuthorizePaymentRequest struct {
 	OrderID string `json:"order_id" binding:"required"`
 	Amount  int64  `json:"amount" binding:"required,gt=0"`
 }
 
-// AuthorizePaymentResponse represents the response for payment authorization
 type AuthorizePaymentResponse struct {
 	TransactionID string `json:"transaction_id"`
 	Status        string `json:"status"`
 	Message       string `json:"message,omitempty"`
 }
 
-// GetPaymentResponse represents the response for getting payment details
 type GetPaymentResponse struct {
 	ID            string `json:"id"`
 	OrderID       string `json:"order_id"`
@@ -35,12 +32,10 @@ type GetPaymentResponse struct {
 	CreatedAt     string `json:"created_at"`
 }
 
-// ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
-// NewPaymentHandler creates a new PaymentHandler instance
 func NewPaymentHandler(
 	authorizeUC *usecase.AuthorizePaymentUseCase,
 	getPaymentUC *usecase.GetPaymentUseCase,
@@ -51,17 +46,14 @@ func NewPaymentHandler(
 	}
 }
 
-// AuthorizePayment handles POST /payments
 func (h *PaymentHandler) AuthorizePayment(c *gin.Context) {
 	var req AuthorizePaymentRequest
 
-	// Parse and validate request
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	// Execute use case
 	input := usecase.AuthorizePaymentInput{
 		OrderID: req.OrderID,
 		Amount:  req.Amount,
@@ -74,7 +66,6 @@ func (h *PaymentHandler) AuthorizePayment(c *gin.Context) {
 		return
 	}
 
-	// Success response
 	c.JSON(http.StatusOK, AuthorizePaymentResponse{
 		TransactionID: output.TransactionID,
 		Status:        output.Status,
@@ -82,7 +73,6 @@ func (h *PaymentHandler) AuthorizePayment(c *gin.Context) {
 	})
 }
 
-// GetPayment handles GET /payments/:order_id
 func (h *PaymentHandler) GetPayment(c *gin.Context) {
 	orderID := c.Param("order_id")
 
@@ -98,7 +88,6 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 		return
 	}
 
-	// Format response
 	response := GetPaymentResponse{
 		ID:            payment.ID,
 		OrderID:       payment.OrderID,

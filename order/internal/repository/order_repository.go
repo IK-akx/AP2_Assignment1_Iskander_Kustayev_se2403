@@ -12,14 +12,12 @@ type OrderRepository struct {
 	db *gorm.DB
 }
 
-// NewOrderRepository creates a new OrderRepository instance
 func NewOrderRepository(db *gorm.DB) *OrderRepository {
 	return &OrderRepository{
 		db: db,
 	}
 }
 
-// Create inserts a new order into the database
 func (r *OrderRepository) Create(order *domain.Order) error {
 	result := r.db.Create(order)
 	if result.Error != nil {
@@ -28,7 +26,6 @@ func (r *OrderRepository) Create(order *domain.Order) error {
 	return nil
 }
 
-// GetByID retrieves an order by its ID
 func (r *OrderRepository) GetByID(id string) (*domain.Order, error) {
 	var order domain.Order
 	result := r.db.First(&order, "id = ?", id)
@@ -43,7 +40,6 @@ func (r *OrderRepository) GetByID(id string) (*domain.Order, error) {
 	return &order, nil
 }
 
-// UpdateStatus updates the status of an order
 func (r *OrderRepository) UpdateStatus(id, status string) error {
 	result := r.db.Model(&domain.Order{}).Where("id = ?", id).Update("status", status)
 

@@ -1,8 +1,9 @@
 package repository
 
 import (
-	"gorm.io/gorm"
 	"order/internal/domain"
+
+	"gorm.io/gorm"
 )
 
 type IdempotencyRepository struct {
