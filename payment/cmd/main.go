@@ -7,11 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"order/internal/client"
-	"order/internal/delivery/rest"
-	"order/internal/domain"
-	"order/internal/repository"
-	"order/internal/usecase"
+	"payment/internal/delivery/rest"
+	"payment/internal/domain"
+	"payment/internal/repository"
+	"payment/internal/usecase"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -30,34 +29,27 @@ func main() {
 	db := initDatabase()
 
 	// Auto migrate the schema
-	if err := db.AutoMigrate(&domain.Order{}); err != nil {
+	if err := db.AutoMigrate(&domain.Payment{}); err != nil {
 		log.Fatal("Failed to migrate database: ", err)
 	}
 	log.Println("Database migrated successfully")
 
 	// Initialize repositories
-	orderRepo := repository.NewOrderRepository(db)
-
-	// Initialize payment client
-	paymentServiceURL := getEnv("PAYMENT_SERVICE_URL", "http://localhost:8081")
-	httpTimeout := getEnvAsInt("HTTP_TIMEOUT", 2)
-	paymentClient := client.NewPaymentClient(paymentServiceURL, time.Duration(httpTimeout)*time.Second)
+	paymentRepo := repository.NewPaymentRepository(db)
 
 	// Initialize use cases
-	createOrderUC := usecase.NewCreateOrderUseCase(orderRepo, paymentClient)
-	getOrderUC := usecase.NewGetOrderUseCase(orderRepo)
-	cancelOrderUC := usecase.NewCancelOrderUseCase(orderRepo)
+	authorizeUC := usecase.NewAuthorizePaymentUseCase(paymentRepo)
+	getPaymentUC := usecase.NewGetPaymentUseCase(paymentRepo)
 
 	// Initialize handlers
-	orderHandler := rest.NewOrderHandler(createOrderUC, getOrderUC, cancelOrderUC)
+	paymentHandler := rest.NewPaymentHandler(authorizeUC, getPaymentUC)
 
 	// Setup Gin router
 	router := gin.Default()
 
 	// Routes
-	router.POST("/orders", orderHandler.CreateOrder)
-	router.GET("/orders/:id", orderHandler.GetOrder)
-	router.PATCH("/orders/:id/cancel", orderHandler.CancelOrder)
+	router.POST("/payments", paymentHandler.AuthorizePayment)
+	router.GET("/payments/:order_id", paymentHandler.GetPayment)
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
@@ -65,8 +57,8 @@ func main() {
 	})
 
 	// Start server
-	port := getEnv("ORDER_SERVICE_PORT", "8080")
-	log.Printf("Order Service starting on port %s", port)
+	port := getEnv("PAYMENT_SERVICE_PORT", "8081")
+	log.Printf("Payment Service starting on port %s", port)
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server: ", err)
 	}
@@ -78,7 +70,7 @@ func initDatabase() *gorm.DB {
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
 	password := getEnv("DB_PASSWORD", "postgres")
-	dbname := getEnv("DB_NAME", "order_db")
+	dbname := getEnv("DB_NAME", "payment_db") // Different database from order service
 	sslMode := getEnv("DB_SSL_MODE", "disable")
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
