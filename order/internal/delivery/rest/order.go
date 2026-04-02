@@ -1,66 +1,48 @@
 package rest
 
 import (
+	"errors"
 	"net/http"
+	"order/internal/constant"
+	"order/internal/delivery/rest/dto"
 	"order/internal/usecase"
+	dto2 "order/internal/usecase/dto"
 
 	"github.com/gin-gonic/gin"
 )
 
 type OrderHandler struct {
-	createOrderUseCase *usecase.CreateOrderUseCase
-	getOrderUseCase    *usecase.GetOrderUseCase
-	cancelOrderUseCase *usecase.CancelOrderUseCase
-}
-
-type CreateOrderRequest struct {
-	CustomerID string `json:"customer_id" binding:"required"`
-	ItemName   string `json:"item_name" binding:"required"`
-	Amount     int64  `json:"amount" binding:"required,gt=0"`
-}
-
-type CreateOrderResponse struct {
-	Order   interface{} `json:"order"`
-	Status  string      `json:"status"`
-	Message string      `json:"message,omitempty"`
-}
-
-type ErrorResponse struct {
-	Error string `json:"error"`
+	OrderUsecase usecase.OrderUsecase
 }
 
 func NewOrderHandler(
-	createUC *usecase.CreateOrderUseCase,
-	getUC *usecase.GetOrderUseCase,
-	cancelUC *usecase.CancelOrderUseCase,
+	orderUsecase usecase.OrderUsecase,
 ) *OrderHandler {
 	return &OrderHandler{
-		createOrderUseCase: createUC,
-		getOrderUseCase:    getUC,
-		cancelOrderUseCase: cancelUC,
+		OrderUsecase: orderUsecase,
 	}
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
-	var req CreateOrderRequest
+	var req dto.CreateOrderRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	input := usecase.CreateOrderInput{
+	input := dto2.CreateOrderInput{
 		CustomerID: req.CustomerID,
 		ItemName:   req.ItemName,
 		Amount:     req.Amount,
 	}
 
-	output, err := h.createOrderUseCase.Execute(input)
+	output, err := h.OrderUsecase.CreateOrder(input)
 
 	if err != nil {
 		if err.Error() == "payment service unavailable: context deadline exceeded" ||
 			err.Error() == "payment service unavailable: dial tcp" {
-			c.JSON(http.StatusServiceUnavailable, CreateOrderResponse{
+			c.JSON(http.StatusServiceUnavailable, dto.CreateOrderResponse{
 				Order:   output.Order,
 				Status:  "pending",
 				Message: "Order created but payment service is unavailable. Please try again later.",
@@ -72,7 +54,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, CreateOrderResponse{
+	c.JSON(http.StatusOK, dto.CreateOrderResponse{
 		Order:   output.Order,
 		Status:  output.Status,
 		Message: output.Message,
@@ -87,10 +69,10 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.getOrderUseCase.Execute(orderID)
+	order, err := h.OrderUsecase.GetOrderByOrderID(orderID)
 
 	if err != nil {
-		if err == usecase.ErrOrderNotFound {
+		if errors.Is(err, constant.ErrOrderNotFound) {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: "order not found"})
 			return
 		}
@@ -109,10 +91,10 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		return
 	}
 
-	err := h.cancelOrderUseCase.Execute(orderID)
+	err := h.OrderUsecase.CancelOrder(orderID)
 
 	if err != nil {
-		if err == usecase.ErrOrderNotFound {
+		if errors.Is(err, constant.ErrOrderNotFound) {
 			c.JSON(http.StatusNotFound, ErrorResponse{Error: "order not found"})
 			return
 		}

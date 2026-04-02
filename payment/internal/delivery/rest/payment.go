@@ -2,34 +2,15 @@ package rest
 
 import (
 	"net/http"
+	"payment/internal/delivery/rest/dto"
 	"payment/internal/usecase"
+	dto2 "payment/internal/usecase/dto"
 
 	"github.com/gin-gonic/gin"
 )
 
 type PaymentHandler struct {
-	authorizeUC  *usecase.AuthorizePaymentUseCase
-	getPaymentUC *usecase.GetPaymentUseCase
-}
-
-type AuthorizePaymentRequest struct {
-	OrderID string `json:"order_id" binding:"required"`
-	Amount  int64  `json:"amount" binding:"required,gt=0"`
-}
-
-type AuthorizePaymentResponse struct {
-	TransactionID string `json:"transaction_id"`
-	Status        string `json:"status"`
-	Message       string `json:"message,omitempty"`
-}
-
-type GetPaymentResponse struct {
-	ID            string `json:"id"`
-	OrderID       string `json:"order_id"`
-	TransactionID string `json:"transaction_id"`
-	Amount        int64  `json:"amount"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
+	PaymentUsecase *usecase.PaymentUsecase
 }
 
 type ErrorResponse struct {
@@ -37,36 +18,34 @@ type ErrorResponse struct {
 }
 
 func NewPaymentHandler(
-	authorizeUC *usecase.AuthorizePaymentUseCase,
-	getPaymentUC *usecase.GetPaymentUseCase,
+	paymentUsecase *usecase.PaymentUsecase,
 ) *PaymentHandler {
 	return &PaymentHandler{
-		authorizeUC:  authorizeUC,
-		getPaymentUC: getPaymentUC,
+		PaymentUsecase: paymentUsecase,
 	}
 }
 
 func (h *PaymentHandler) AuthorizePayment(c *gin.Context) {
-	var req AuthorizePaymentRequest
+	var req dto.AuthorizePaymentRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	input := usecase.AuthorizePaymentInput{
+	input := dto2.AuthorizePaymentInput{
 		OrderID: req.OrderID,
 		Amount:  req.Amount,
 	}
 
-	output, err := h.authorizeUC.Execute(input)
+	output, err := h.PaymentUsecase.AuthorizePayment(input)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, AuthorizePaymentResponse{
+	c.JSON(http.StatusOK, dto.AuthorizePaymentResponse{
 		TransactionID: output.TransactionID,
 		Status:        output.Status,
 		Message:       output.Message,
@@ -81,14 +60,14 @@ func (h *PaymentHandler) GetPayment(c *gin.Context) {
 		return
 	}
 
-	payment, err := h.getPaymentUC.Execute(orderID)
+	payment, err := h.PaymentUsecase.GetPaymentByOrderID(orderID)
 
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	response := GetPaymentResponse{
+	response := dto.GetPaymentResponse{
 		ID:            payment.ID,
 		OrderID:       payment.OrderID,
 		TransactionID: payment.TransactionID,

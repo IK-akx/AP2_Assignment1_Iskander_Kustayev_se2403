@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -11,6 +12,10 @@ type Order struct {
 	Amount     int64     `gorm:"not null;check:amount > 0" json:"amount"`              // Amount in cents
 	Status     string    `gorm:"not null;size:20;default:Pending;index" json:"status"` // "Pending", "Paid", "Failed", "Cancelled"
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func GenerateOrderID() string {
+	return fmt.Sprintf("ORD-%d", time.Now().UnixNano())
 }
 
 func (Order) TableName() string {

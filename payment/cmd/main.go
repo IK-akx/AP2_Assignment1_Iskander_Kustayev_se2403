@@ -33,10 +33,9 @@ func main() {
 
 	paymentRepo := repository.NewPaymentRepository(db)
 
-	authorizeUC := usecase.NewAuthorizePaymentUseCase(paymentRepo)
-	getPaymentUC := usecase.NewGetPaymentUseCase(paymentRepo)
+	paymentUsecase := usecase.PaymentUsecase{PaymentRepo: paymentRepo}
 
-	paymentHandler := rest.NewPaymentHandler(authorizeUC, getPaymentUC)
+	paymentHandler := rest.NewPaymentHandler(&paymentUsecase)
 
 	router := gin.Default()
 
