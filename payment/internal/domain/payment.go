@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -11,6 +12,14 @@ type Payment struct {
 	Amount        int64     `gorm:"not null;check:amount > 0" json:"amount"`
 	Status        string    `gorm:"not null;size:20;index" json:"status"` // "Authorized", "Declined"
 	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func GeneratePaymentID() string {
+	return fmt.Sprintf("PAY-%d", time.Now().UnixNano())
+}
+
+func GenerateTransactionID() string {
+	return fmt.Sprintf("TXN-%d", time.Now().UnixNano())
 }
 
 func (Payment) TableName() string {

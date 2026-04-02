@@ -38,11 +38,9 @@ func main() {
 	httpTimeout := getEnvAsInt("HTTP_TIMEOUT", 2)
 	paymentClient := client.NewPaymentClient(paymentServiceURL, time.Duration(httpTimeout)*time.Second)
 
-	createOrderUC := usecase.NewCreateOrderUseCase(orderRepo, paymentClient)
-	getOrderUC := usecase.NewGetOrderUseCase(orderRepo)
-	cancelOrderUC := usecase.NewCancelOrderUseCase(orderRepo)
+	orderUC := usecase.OrderUsecase{OrderRepo: orderRepo, OrderClient: paymentClient}
 
-	orderHandler := rest.NewOrderHandler(createOrderUC, getOrderUC, cancelOrderUC)
+	orderHandler := rest.NewOrderHandler(orderUC)
 
 	router := gin.Default()
 
