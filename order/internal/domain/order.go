@@ -29,10 +29,12 @@ const (
 	OrderStatusCancelled = "Cancelled"
 )
 
+// OrderRepository defines the interface for order data persistence
 type OrderRepository interface {
 	Create(order *Order) error
 	GetByID(id string) (*Order, error)
 	UpdateStatus(id, status string) error
+	GetRecentOrders(limit int) ([]Order, error) // Новый метод
 }
 
 type PaymentGateway interface {

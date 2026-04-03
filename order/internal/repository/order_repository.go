@@ -46,3 +46,17 @@ func (r *OrderRepository) UpdateStatus(id, status string) error {
 
 	return nil
 }
+
+// GetRecentOrders retrieves recent orders sorted by creation time (newest first)
+func (r *OrderRepository) GetRecentOrders(limit int) ([]domain.Order, error) {
+	var orders []domain.Order
+
+	// Query orders ordered by created_at descending (newest first)
+	result := r.db.Order("created_at DESC").Limit(limit).Find(&orders)
+
+	if result.Error != nil {
+		return nil, fmt.Errorf("failed to get recent orders: %w", result.Error)
+	}
+
+	return orders, nil
+}
