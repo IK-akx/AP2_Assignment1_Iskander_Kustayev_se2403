@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"errors"
 	"fmt"
 	"order/internal/domain"
 
@@ -20,10 +19,7 @@ func NewOrderRepository(db *gorm.DB) *OrderRepository {
 
 func (r *OrderRepository) Create(order *domain.Order) error {
 	result := r.db.Create(order)
-	if result.Error != nil {
-		return fmt.Errorf("failed to create order: %w", result.Error)
-	}
-	return nil
+	return result.Error
 }
 
 func (r *OrderRepository) GetByID(id string) (*domain.Order, error) {
@@ -31,10 +27,7 @@ func (r *OrderRepository) GetByID(id string) (*domain.Order, error) {
 	result := r.db.First(&order, "id = ?", id)
 
 	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get order: %w", result.Error)
+		return nil, result.Error
 	}
 
 	return &order, nil
@@ -44,7 +37,7 @@ func (r *OrderRepository) UpdateStatus(id, status string) error {
 	result := r.db.Model(&domain.Order{}).Where("id = ?", id).Update("status", status)
 
 	if result.Error != nil {
-		return fmt.Errorf("failed to update order status: %w", result.Error)
+		return result.Error
 	}
 
 	if result.RowsAffected == 0 {
