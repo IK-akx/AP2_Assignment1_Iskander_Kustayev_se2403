@@ -84,7 +84,7 @@ func (uc *OrderUsecase) CancelOrder(orderID string) error {
 		return constant.ErrOrderNotFound
 	}
 
-	// Business rule: Only Pending orders can be cancelled
+	// Business rule:Only Pending orders can be cancelled
 	if order.Status != domain.OrderStatusPending {
 		return fmt.Errorf("%w: order status is %s, cannot cancel", constant.ErrInvalidOrderStatus, order.Status)
 	}
