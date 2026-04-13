@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
+	grpcHandler "payment/internal/delivery/grpc"
 	"strconv"
 	"time"
 
@@ -12,8 +14,10 @@ import (
 	"payment/internal/repository"
 	"payment/internal/usecase"
 
+	pb "github.com/IK-akx/ap2-generated/payment"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -34,6 +38,30 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 
 	paymentUsecase := usecase.PaymentUsecase{PaymentRepo: paymentRepo}
+
+	go func() {
+		grpcPort := getEnv("PAYMENT_GRPC_PORT", "50051")
+
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		grpcServer := grpc.NewServer(
+			grpc.UnaryInterceptor(grpcHandler.LoggingInterceptor),
+		)
+
+		pb.RegisterPaymentServiceServer(
+			grpcServer,
+			grpcHandler.NewPaymentGrpcHandler(&paymentUsecase),
+		)
+
+		log.Printf("gRPC server running on port %s", grpcPort)
+
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve gRPC: %v", err)
+		}
+	}()
 
 	paymentHandler := rest.NewPaymentHandler(&paymentUsecase)
 

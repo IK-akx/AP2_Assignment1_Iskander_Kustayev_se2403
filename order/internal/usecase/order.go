@@ -3,6 +3,7 @@ package usecase
 import (
 	"fmt"
 	"order/internal/constant"
+	"order/internal/delivery/grpc"
 	"order/internal/domain"
 	"order/internal/usecase/dto"
 	"time"
@@ -11,6 +12,7 @@ import (
 type OrderUsecase struct {
 	OrderRepo   domain.OrderRepository
 	OrderClient domain.PaymentGateway
+	Notifier    *grpc.Notifier
 }
 
 func (uc *OrderUsecase) GetOrderByOrderID(orderID string) (*domain.Order, error) {
@@ -67,6 +69,15 @@ func (uc *OrderUsecase) CreateOrder(input dto.CreateOrderInput) (*dto.CreateOrde
 
 	order.Status = finalStatus
 
+	if uc.Notifier != nil {
+		uc.Notifier.Notify(grpc.OrderUpdate{
+			OrderID:   order.ID,
+			OldStatus: domain.OrderStatusPending,
+			NewStatus: finalStatus,
+			Message:   responseMessage,
+		})
+	}
+
 	return &dto.CreateOrderOutput{
 		Order:   order,
 		Status:  finalStatus,
@@ -92,6 +103,15 @@ func (uc *OrderUsecase) CancelOrder(orderID string) error {
 	// Update order status to Cancelled
 	if err := uc.OrderRepo.UpdateStatus(orderID, domain.OrderStatusCancelled); err != nil {
 		return fmt.Errorf("failed to cancel order: %w", err)
+	}
+
+	if uc.Notifier != nil {
+		uc.Notifier.Notify(grpc.OrderUpdate{
+			OrderID:   orderID,
+			OldStatus: order.Status,
+			NewStatus: domain.OrderStatusCancelled,
+			Message:   "Order cancelled",
+		})
 	}
 
 	return nil

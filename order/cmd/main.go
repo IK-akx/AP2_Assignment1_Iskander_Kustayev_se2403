@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -15,9 +16,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"google.golang.org/grpc"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	grpcDelivery "order/internal/delivery/grpc"
+
+	orderpb "github.com/IK-akx/ap2-generated/order"
 )
 
 func main() {
@@ -34,14 +40,54 @@ func main() {
 
 	orderRepo := repository.NewOrderRepository(db)
 
-	paymentServiceURL := getEnv("PAYMENT_SERVICE_URL", "http://localhost:8081")
-	httpTimeout := getEnvAsInt("HTTP_TIMEOUT", 2)
-	paymentClient := client.NewPaymentClient(paymentServiceURL, time.Duration(httpTimeout)*time.Second)
+	// 🔹 gRPC client (Order -> Payment)
+	grpcHost := getEnv("PAYMENT_GRPC_HOST", "localhost")
+	grpcPort := getEnv("PAYMENT_GRPC_PORT", "50051")
+	grpcTimeout := getEnvAsInt("PAYMENT_GRPC_TIMEOUT", 3)
 
-	orderUC := usecase.OrderUsecase{OrderRepo: orderRepo, OrderClient: paymentClient}
+	address := fmt.Sprintf("%s:%s", grpcHost, grpcPort)
+
+	paymentClient, err := client.NewPaymentGrpcClient(address, time.Duration(grpcTimeout)*time.Second)
+	if err != nil {
+		log.Fatal("failed to connect to payment service:", err)
+	}
+
+	// 🔹 notifier для streaming
+	notifier := grpcDelivery.NewNotifier()
+
+	// 🔹 usecase (ОДИН раз!)
+	orderUC := usecase.OrderUsecase{
+		OrderRepo:   orderRepo,
+		OrderClient: paymentClient,
+		Notifier:    notifier,
+	}
 
 	orderHandler := rest.NewOrderHandler(orderUC)
 
+	// 🔹 gRPC server (streaming)
+	go func() {
+		grpcPort := getEnv("ORDER_GRPC_PORT", "50052")
+
+		lis, err := net.Listen("tcp", ":"+grpcPort)
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		grpcServer := grpc.NewServer()
+
+		orderpb.RegisterOrderTrackingServiceServer(
+			grpcServer,
+			grpcDelivery.NewOrderGrpcHandler(notifier),
+		)
+
+		log.Printf("Order gRPC server running on port %s", grpcPort)
+
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve gRPC: %v", err)
+		}
+	}()
+
+	// 🔹 REST API
 	router := gin.Default()
 
 	router.POST("/orders", orderHandler.CreateOrder)
