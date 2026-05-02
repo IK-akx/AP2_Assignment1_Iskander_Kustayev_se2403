@@ -11,6 +11,7 @@ import (
 
 	"payment/internal/delivery/rest"
 	"payment/internal/domain"
+	"payment/internal/messaging"
 	"payment/internal/repository"
 	"payment/internal/usecase"
 
@@ -37,7 +38,18 @@ func main() {
 
 	paymentRepo := repository.NewPaymentRepository(db)
 
-	paymentUsecase := usecase.PaymentUsecase{PaymentRepo: paymentRepo}
+	natsURL := getEnv("NATS_URL", "nats://localhost:4222")
+
+	eventPublisher, err := messaging.NewNATSPublisher(natsURL)
+	if err != nil {
+		log.Fatal("failed to connect to NATS:", err)
+	}
+	defer eventPublisher.Close()
+
+	paymentUsecase := usecase.PaymentUsecase{
+		PaymentRepo:    paymentRepo,
+		EventPublisher: eventPublisher,
+	}
 
 	go func() {
 		grpcPort := getEnv("PAYMENT_GRPC_PORT", "50051")
