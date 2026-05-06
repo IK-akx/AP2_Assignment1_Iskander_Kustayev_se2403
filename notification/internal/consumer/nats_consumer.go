@@ -3,10 +3,16 @@ package consumer
 import (
 	"encoding/json"
 	"log"
-
-	"notification/internal/idempotency"
+	"time"
 
 	"github.com/nats-io/nats.go"
+	"notification/internal/idempotency"
+)
+
+const (
+	streamName = "PAYMENT_EVENTS"
+	subject    = "payment.completed"
+	durable    = "notification-service"
 )
 
 type PaymentEvent struct {
@@ -19,7 +25,9 @@ type PaymentEvent struct {
 
 type Consumer struct {
 	conn  *nats.Conn
+	js    nats.JetStreamContext
 	store *idempotency.Store
+	sub   *nats.Subscription
 }
 
 func NewConsumer(natsURL string) (*Consumer, error) {
@@ -28,44 +36,77 @@ func NewConsumer(natsURL string) (*Consumer, error) {
 		return nil, err
 	}
 
+	js, err := nc.JetStream()
+	if err != nil {
+		nc.Close()
+		return nil, err
+	}
+
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     streamName,
+		Subjects: []string{subject},
+		Storage:  nats.FileStorage,
+	})
+	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+		nc.Close()
+		return nil, err
+	}
+
 	return &Consumer{
 		conn:  nc,
+		js:    js,
 		store: idempotency.NewStore(),
 	}, nil
 }
 
 func (c *Consumer) Start() error {
-	_, err := c.conn.Subscribe("payment.completed", func(msg *nats.Msg) {
+	sub, err := c.js.Subscribe(
+		subject,
+		func(msg *nats.Msg) {
+			var event PaymentEvent
 
-		var event PaymentEvent
+			if err := json.Unmarshal(msg.Data, &event); err != nil {
+				log.Println("failed to parse message:", err)
+				msg.Nak()
+				return
+			}
 
-		if err := json.Unmarshal(msg.Data, &event); err != nil {
-			log.Println("failed to parse message:", err)
-			return
-		}
+			if c.store.IsProcessed(event.EventID) {
+				log.Println("duplicate event skipped:", event.EventID)
+				msg.Ack()
+				return
+			}
 
-		// Idempotency check
-		if c.store.IsProcessed(event.EventID) {
-			log.Println("duplicate event skipped:", event.EventID)
-			return
-		}
+			log.Printf(
+				"[Notification] Sent email to %s for Order #%s. Amount: %d",
+				event.CustomerEmail,
+				event.OrderID,
+				event.Amount,
+			)
 
-		// Simulate email
-		log.Printf(
-			"[Notification] Sent email to %s for Order #%s. Amount: %d",
-			event.CustomerEmail,
-			event.OrderID,
-			event.Amount,
-		)
+			c.store.MarkProcessed(event.EventID)
 
-		// mark processed
-		c.store.MarkProcessed(event.EventID)
+			if err := msg.Ack(); err != nil {
+				log.Println("failed to ack message:", err)
+				return
+			}
+		},
+		nats.Durable(durable),
+		nats.ManualAck(),
+		nats.AckWait(10*time.Second),
+	)
 
-	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	c.sub = sub
+	return nil
 }
 
 func (c *Consumer) Close() {
+	if c.sub != nil {
+		_ = c.sub.Drain()
+	}
 	c.conn.Close()
 }

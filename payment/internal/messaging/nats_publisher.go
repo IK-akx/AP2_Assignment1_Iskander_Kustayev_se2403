@@ -6,8 +6,14 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const (
+	streamName = "PAYMENT_EVENTS"
+	subject    = "payment.completed"
+)
+
 type NATSPublisher struct {
 	conn *nats.Conn
+	js   nats.JetStreamContext
 }
 
 func NewNATSPublisher(natsURL string) (*NATSPublisher, error) {
@@ -16,8 +22,25 @@ func NewNATSPublisher(natsURL string) (*NATSPublisher, error) {
 		return nil, err
 	}
 
+	js, err := nc.JetStream()
+	if err != nil {
+		nc.Close()
+		return nil, err
+	}
+
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     streamName,
+		Subjects: []string{subject},
+		Storage:  nats.FileStorage,
+	})
+	if err != nil && err != nats.ErrStreamNameAlreadyInUse {
+		nc.Close()
+		return nil, err
+	}
+
 	return &NATSPublisher{
 		conn: nc,
+		js:   js,
 	}, nil
 }
 
@@ -27,7 +50,8 @@ func (p *NATSPublisher) PublishPaymentCompleted(event PaymentCompletedEvent) err
 		return err
 	}
 
-	return p.conn.Publish("payment.completed", data)
+	_, err = p.js.Publish(subject, data)
+	return err
 }
 
 func (p *NATSPublisher) Close() {

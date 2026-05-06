@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+
+  order-db:
+    image: postgres:16
+    container_name: order-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 0000
+      POSTGRES_DB: order_db
+    ports:
+      - "5433:5432"
+
+  payment-db:
+    image: postgres:16
+    container_name: payment-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 0000
+      POSTGRES_DB: payment_db
+    ports:
+      - "5434:5432"
+
+  nats:
+    image: nats:latest
+    container_name: nats
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  payment:
+    build: ./payment
+    container_name: payment-service
+    depends_on:
+      - payment-db
+      - nats
+    environment:
+      PAYMENT_SERVICE_PORT: 8081
+      PAYMENT_GRPC_PORT: 50051
+
+      DB_HOST: payment-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: 0000
+      DB_NAME: payment_db
+      DB_SSL_MODE: disable
+
+      NATS_URL: nats://nats:4222
+    ports:
+      - "8081:8081"
+      - "50051:50051"
+
+  order:
+    build: ./order
+    container_name: order-service
+    depends_on:
+      - order-db
+      - payment
+    environment:
+      ORDER_SERVICE_PORT: 8080
+      ORDER_GRPC_PORT: 50052
+
+      DB_HOST: order-db
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: 0000
+      DB_NAME: order_db
+      DB_SSL_MODE: disable
+
+      PAYMENT_GRPC_HOST: payment
+      PAYMENT_GRPC_PORT: 50051
+    ports:
+      - "8080:8080"
+      - "50052:50052"
+
+  notification:
+    build: ./notification
+    container_name: notification-service
+    depends_on:
+      - nats
+    environment:
+      NATS_URL: nats://nats:4222

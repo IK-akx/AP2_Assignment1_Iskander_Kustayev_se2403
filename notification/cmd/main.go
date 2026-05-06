@@ -10,7 +10,10 @@ import (
 )
 
 func main() {
-	natsURL := "nats://localhost:4222"
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
 
 	consumer, err := consumer.NewConsumer(natsURL)
 	if err != nil {

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
-	grpcHandler "payment/internal/delivery/grpc"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
+	grpcHandler "payment/internal/delivery/grpc"
 	"payment/internal/delivery/rest"
 	"payment/internal/domain"
 	"payment/internal/messaging"
@@ -44,12 +48,15 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to connect to NATS:", err)
 	}
-	defer eventPublisher.Close()
 
 	paymentUsecase := usecase.PaymentUsecase{
 		PaymentRepo:    paymentRepo,
 		EventPublisher: eventPublisher,
 	}
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(grpcHandler.LoggingInterceptor),
+	)
 
 	go func() {
 		grpcPort := getEnv("PAYMENT_GRPC_PORT", "50051")
@@ -58,10 +65,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
-
-		grpcServer := grpc.NewServer(
-			grpc.UnaryInterceptor(grpcHandler.LoggingInterceptor),
-		)
 
 		pb.RegisterPaymentServiceServer(
 			grpcServer,
@@ -87,10 +90,37 @@ func main() {
 	})
 
 	port := getEnv("PAYMENT_SERVICE_PORT", "8081")
-	log.Printf("Payment Service starting on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatal("Failed to start server: ", err)
+
+	httpServer := &http.Server{
+		Addr:    ":" + port,
+		Handler: router,
 	}
+
+	go func() {
+		log.Printf("Payment Service starting on port %s", port)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Failed to start server: ", err)
+		}
+	}()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	<-ctx.Done()
+
+	log.Println("Shutting down Payment Service...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Println("HTTP server shutdown error:", err)
+	}
+
+	grpcServer.GracefulStop()
+	eventPublisher.Close()
+
+	log.Println("Payment Service stopped gracefully")
 }
 
 func initDatabase() *gorm.DB {
@@ -98,7 +128,7 @@ func initDatabase() *gorm.DB {
 	port := getEnv("DB_PORT", "5432")
 	user := getEnv("DB_USER", "postgres")
 	password := getEnv("DB_PASSWORD", "postgres")
-	dbname := getEnv("DB_NAME", "payment_db") // Different database from order service
+	dbname := getEnv("DB_NAME", "payment_db")
 	sslMode := getEnv("DB_SSL_MODE", "disable")
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
