@@ -3,12 +3,14 @@ package usecase
 import (
 	"fmt"
 	"payment/internal/domain"
+	"payment/internal/messaging"
 	"payment/internal/usecase/dto"
 	"time"
 )
 
 type PaymentUsecase struct {
-	PaymentRepo domain.PaymentRepository
+	PaymentRepo    domain.PaymentRepository
+	EventPublisher messaging.EventPublisher
 }
 
 func (uc *PaymentUsecase) GetPaymentByOrderID(orderID string) (*domain.Payment, error) {
@@ -59,6 +61,20 @@ func (uc *PaymentUsecase) AuthorizePayment(input dto.AuthorizePaymentInput) (*dt
 
 	if err := uc.PaymentRepo.Create(payment); err != nil {
 		return nil, fmt.Errorf("failed to save payment: %w", err)
+	}
+
+	if uc.EventPublisher != nil {
+		event := messaging.PaymentCompletedEvent{
+			EventID:       payment.ID,
+			OrderID:       payment.OrderID,
+			Amount:        payment.Amount,
+			CustomerEmail: "user@example.com",
+			Status:        payment.Status,
+		}
+
+		if err := uc.EventPublisher.PublishPaymentCompleted(event); err != nil {
+			return nil, fmt.Errorf("failed to publish payment completed event: %w", err)
+		}
 	}
 
 	return &dto.AuthorizePaymentOutput{
