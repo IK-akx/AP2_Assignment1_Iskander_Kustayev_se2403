@@ -7,6 +7,6 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o notification-service ./cmd
+RUN go build -o notification-service cmd/main.go
 
 CMD ["./notification-service"]

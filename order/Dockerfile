@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o order-service ./cmd
+RUN go build -o order-service cmd/main.go
 
 EXPOSE 8080
 EXPOSE 50052

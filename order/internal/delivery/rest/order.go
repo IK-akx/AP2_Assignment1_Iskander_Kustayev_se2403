@@ -3,8 +3,11 @@ package rest
 import (
 	"errors"
 	"net/http"
+	"order/internal/cache"
 	"order/internal/constant"
 	"order/internal/delivery/rest/dto"
+	"order/internal/domain"
+	"order/internal/middleware"
 	"order/internal/usecase"
 	dto2 "order/internal/usecase/dto"
 
@@ -13,14 +16,29 @@ import (
 
 type OrderHandler struct {
 	OrderUsecase usecase.OrderUsecase
+	OrderCache   *cache.OrderCache
 }
 
 func NewOrderHandler(
 	orderUsecase usecase.OrderUsecase,
+	orderCache *cache.OrderCache,
 ) *OrderHandler {
 	return &OrderHandler{
 		OrderUsecase: orderUsecase,
+		OrderCache:   orderCache,
 	}
+}
+
+// ApplyRateLimiter applies rate limiting to routes
+func ApplyRateLimiter(router *gin.Engine, limiter *cache.RateLimiter) {
+	// Create middleware with IP-based rate limiting
+	rateLimiterMiddleware := middleware.RateLimiterMiddleware(
+		limiter,
+		middleware.GetIdentifierByIP, // or GetIdentifierByUserID
+	)
+
+	// Apply to all routes or specific ones
+	router.Use(rateLimiterMiddleware)
 }
 
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
@@ -61,6 +79,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	})
 }
 
+// GetOrder - с поддержкой кэша (Cache-Aside Pattern)
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -69,20 +88,45 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.OrderUsecase.GetOrderByOrderID(orderID)
+	// 1. Проверяем кэш
+	var order *domain.Order
+	var err error
 
-	if err != nil {
-		if errors.Is(err, constant.ErrOrderNotFound) {
-			c.JSON(http.StatusNotFound, ErrorResponse{Error: "order not found"})
+	if h.OrderCache != nil {
+		order, err = h.OrderCache.Get(orderID)
+		if err != nil {
+			// Логируем ошибку кэша, но продолжаем (fallback to DB)
+			c.Error(err)
+		}
+	}
+
+	// 2. Если в кэше нет - идем в БД
+	if order == nil {
+		order, err = h.OrderUsecase.GetOrderByOrderID(orderID)
+
+		if err != nil {
+			if errors.Is(err, constant.ErrOrderNotFound) {
+				c.JSON(http.StatusNotFound, ErrorResponse{Error: "order not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
-		return
+
+		// 3. Сохраняем в кэш (асинхронно, не блокируем ответ)
+		if h.OrderCache != nil {
+			go func() {
+				if err := h.OrderCache.Set(order); err != nil {
+					c.Error(err)
+				}
+			}()
+		}
 	}
 
 	c.JSON(http.StatusOK, order)
 }
 
+// CancelOrder - добавить инвалидацию кэша
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	orderID := c.Param("id")
 
@@ -100,6 +144,15 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		}
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
+	}
+
+	// Инвалидируем кэш после успешной отмены
+	if h.OrderCache != nil {
+		go func() {
+			if err := h.OrderCache.Delete(orderID); err != nil {
+				c.Error(err)
+			}
+		}()
 	}
 
 	c.JSON(http.StatusOK, gin.H{

@@ -7,7 +7,7 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o payment-service ./cmd
+RUN go build -o payment-service cmd/main.go
 
 EXPOSE 8081
 EXPOSE 50051

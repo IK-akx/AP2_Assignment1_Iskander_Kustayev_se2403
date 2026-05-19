@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"order/internal/cache"
 	"order/internal/constant"
 	"order/internal/delivery/grpc"
 	"order/internal/domain"
@@ -13,6 +14,7 @@ type OrderUsecase struct {
 	OrderRepo   domain.OrderRepository
 	OrderClient domain.PaymentGateway
 	Notifier    *grpc.Notifier
+	OrderCache  *cache.OrderCache
 }
 
 func (uc *OrderUsecase) GetOrderByOrderID(orderID string) (*domain.Order, error) {
@@ -95,7 +97,7 @@ func (uc *OrderUsecase) CancelOrder(orderID string) error {
 		return constant.ErrOrderNotFound
 	}
 
-	// Business rule:Only Pending orders can be cancelled
+	// Business rule: Only Pending orders can be cancelled
 	if order.Status != domain.OrderStatusPending {
 		return fmt.Errorf("%w: order status is %s, cannot cancel", constant.ErrInvalidOrderStatus, order.Status)
 	}
@@ -103,6 +105,12 @@ func (uc *OrderUsecase) CancelOrder(orderID string) error {
 	// Update order status to Cancelled
 	if err := uc.OrderRepo.UpdateStatus(orderID, domain.OrderStatusCancelled); err != nil {
 		return fmt.Errorf("failed to cancel order: %w", err)
+	}
+
+	if uc.OrderCache != nil {
+		if err := uc.OrderCache.Delete(orderID); err != nil {
+			fmt.Printf("Warning: failed to invalidate cache for order %s: %v\n", orderID, err)
+		}
 	}
 
 	if uc.Notifier != nil {

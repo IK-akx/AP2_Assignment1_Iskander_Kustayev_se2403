@@ -58,6 +58,7 @@ services:
     depends_on:
       - order-db
       - payment
+      - redis
     environment:
       ORDER_SERVICE_PORT: 8080
       ORDER_GRPC_PORT: 50052
@@ -71,6 +72,15 @@ services:
 
       PAYMENT_GRPC_HOST: payment
       PAYMENT_GRPC_PORT: 50051
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      CACHE_TTL: ${CACHE_TTL:-300}
+
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-10}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS:-60}
+
     ports:
       - "8080:8080"
       - "50052:50052"
@@ -80,5 +90,51 @@ services:
     container_name: notification-service
     depends_on:
       - nats
+      - redis
     environment:
       NATS_URL: nats://nats:4222
+
+      # Email Provider Configuration
+      PROVIDER_MODE: ${PROVIDER_MODE:-SIMULATED}
+      SIMULATED_DELAY_MS: ${SIMULATED_DELAY_MS:-200}
+      SIMULATED_FAILURE_RATE: ${SIMULATED_FAILURE_RATE:-0.3}
+
+      # Real SMTP settings (if using REAL provider)
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+
+      # Redis (for idempotency)
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+
+      # Worker Configuration
+      WORKER_COUNT: ${WORKER_COUNT:-5}
+      MAX_RETRIES: ${MAX_RETRIES:-3}
+      IDEMPOTENCY_TTL_HOURS: ${IDEMPOTENCY_TTL_HOURS:-24}
+
+    restart: unless-stopped
+
+    ports:
+      - "8082:8082"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+    redis-data:
